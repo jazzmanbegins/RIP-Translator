@@ -15,8 +15,9 @@ let observer = null;
 let pollInterval = null;
 let currentText = '';
 let translateTimeout = null;
-// Custom drag position (null = use auto-position from video container)
+// Custom drag position stored as ratio (null = auto-position from video container)
 let dragPos = null;
+let resizeHandler = null;
 let settings = {
   fontSize: 22,
   textColor: '#ffffff',
@@ -26,8 +27,6 @@ let settings = {
 };
 
 // ─── Load Noto Sans Thai from Google Fonts into the page ─────────────────────
-// Content scripts cannot use @font-face directly, so we inject a <link> tag.
-// Noto Sans Thai covers Thai + Latin perfectly and is not pre-installed on Windows.
 (function injectFont() {
   const id = 'udemy-thai-gfont';
   if (document.getElementById(id)) return;
@@ -49,7 +48,7 @@ chrome.storage.sync.get(['enabled', 'settings'], (result) => {
 // ─── Real-time subtitle log (collected as you watch) ─────────────────────────
 const subtitleLog = [];
 let lastLogged    = '';
-let isCollecting  = false; // user must press Start to begin collecting
+let isCollecting  = false;
 
 // Handle popup requests
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -74,7 +73,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// Listen for storage changes — reliable regardless of message-passing state
+// Listen for storage changes
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.enabled) {
     isEnabled = changes.enabled.newValue;
@@ -91,7 +90,6 @@ chrome.storage.onChanged.addListener((changes) => {
     const prev = settings.targetLang;
     settings = { ...settings, ...changes.settings.newValue };
     applyStyles();
-    // Language changed → clear cache + force re-translate current subtitle
     if (prev !== settings.targetLang) {
       cache.clear();
       currentText = '';
@@ -120,9 +118,6 @@ function init() {
 }
 
 // ─── Hide Udemy's original caption display ────────────────────────────────────
-// We use visibility:hidden (not display:none) so the DOM element stays readable.
-// A <style> tag is injected so it persists across React re-renders.
-
 let captionHideStyle = null;
 
 function hideUdemyCaptions(hide) {
@@ -130,7 +125,6 @@ function hideUdemyCaptions(hide) {
     if (!captionHideStyle) {
       captionHideStyle = document.createElement('style');
       captionHideStyle.id = 'udemy-thai-hide-captions';
-      // Hide the visual container but keep the text node in the DOM
       captionHideStyle.textContent = `
         [class*="captions-container"] { visibility: hidden !important; }
       `;
@@ -158,22 +152,19 @@ function createOverlay() {
   overlay.appendChild(thaiLine);
   overlay.appendChild(origLine);
 
-  // Attach to video container so it works in fullscreen too
   attachOverlay();
   applyStyles();
   positionOverlay();
 
-  // Drag from the overlay itself (no handle)
   makeDraggable(overlay);
 
-  window.addEventListener('resize', () => { dragPos = null; positionOverlay(); });
-
-  // Move overlay when entering/exiting fullscreen
+  resizeHandler = () => { dragPos = null; positionOverlay(); };
+  window.addEventListener('resize', resizeHandler);
   document.addEventListener('fullscreenchange', onFullscreenChange);
 }
 
 function makeDraggable(el) {
-  let startX, startY, startCX, startCY; // track CENTER, not left/top
+  let startX, startY, startCX, startCY;
 
   el.addEventListener('mousedown', onDown);
   el.addEventListener('touchstart', onDown, { passive: false });
@@ -183,7 +174,6 @@ function makeDraggable(el) {
     const pt = e.touches ? e.touches[0] : e;
     startX = pt.clientX;
     startY = pt.clientY;
-    // Record center of overlay at drag start
     const rect = el.getBoundingClientRect();
     startCX = rect.left + rect.width  / 2;
     startCY = rect.top  + rect.height / 2;
@@ -198,23 +188,19 @@ function makeDraggable(el) {
   function onMove(e) {
     e.preventDefault();
     const pt = e.touches ? e.touches[0] : e;
-    // New center = start center + delta
     const cx = startCX + (pt.clientX - startX);
     const cy = startCY + (pt.clientY - startY);
-    // Clamp center so overlay stays fully on screen
     const hw = el.offsetWidth  / 2;
     const hh = el.offsetHeight / 2;
     const clampedCX = Math.max(hw, Math.min(window.innerWidth  - hw, cx));
     const clampedCY = Math.max(hh, Math.min(window.innerHeight - hh, cy));
 
-    // Position by center using transform
     el.style.left      = clampedCX + 'px';
     el.style.top       = clampedCY + 'px';
     el.style.transform = 'translate(-50%, -50%)';
     el.style.bottom    = 'auto';
     el.style.right     = 'auto';
 
-    // Save center as ratio so resize keeps proportional position
     dragPos = { rx: clampedCX / window.innerWidth, ry: clampedCY / window.innerHeight };
   }
 
@@ -226,7 +212,6 @@ function makeDraggable(el) {
     document.removeEventListener('touchend',  onUp);
   }
 
-  // Double-click → reset to default position
   el.addEventListener('dblclick', () => {
     dragPos = null;
     positionOverlay();
@@ -237,10 +222,8 @@ function attachOverlay() {
   if (!overlay) return;
   const fsEl = document.fullscreenElement;
   if (fsEl) {
-    // In fullscreen: append inside the fullscreen element
     fsEl.appendChild(overlay);
   } else {
-    // Normal: append to body
     document.body.appendChild(overlay);
   }
 }
@@ -254,7 +237,7 @@ function onFullscreenChange() {
 
 function destroyOverlay() {
   if (overlay) { overlay.remove(); overlay = null; }
-  window.removeEventListener('resize', positionOverlay);
+  if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
   document.removeEventListener('fullscreenchange', onFullscreenChange);
 }
 
@@ -299,7 +282,6 @@ function applyStyles() {
 function positionOverlay() {
   if (!overlay) return;
 
-  // User dragged — restore center from ratio so resize keeps proportional position
   if (dragPos) {
     const cx = dragPos.rx * window.innerWidth;
     const cy = dragPos.ry * window.innerHeight;
@@ -344,7 +326,6 @@ function showTranslation(thai, original) {
   overlay.querySelector('.orig-line').textContent = original;
   overlay.style.opacity = '1';
   positionOverlay();
-  // Collect only when user pressed Start
   if (isCollecting && thai && thai !== lastLogged) {
     subtitleLog.push(thai);
     lastLogged = thai;
@@ -407,7 +388,6 @@ async function translateText(text) {
     return;
   }
 
-  // Cache key includes target language so switching language re-translates correctly
   const key = `${settings.targetLang}|${text.trim()}`;
   if (cache.has(key)) {
     if (currentText === text) showTranslation(cache.get(key), settings.showOriginal ? text : '');
@@ -439,7 +419,7 @@ async function googleTranslate(text, tl) {
   return null;
 }
 
-// ─── SPA navigation (Udemy changes lecture without full page reload) ───────────
+// ─── SPA navigation ───────────────────────────────────────────────────────────
 
 let lastHref = location.href;
 setInterval(() => {
