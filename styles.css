@@ -1,0 +1,32 @@
+/* Injected into Udemy pages */
+#udemy-thai-overlay {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  text-align: center;
+  padding: 6px 14px;
+  max-width: 80vw;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: opacity 0.2s ease;
+  font-family: 'Sarabun', 'Noto Sans Thai', 'TH Sarabun New', Arial, sans-serif;
+}
+
+#udemy-thai-overlay .thai-text {
+  font-size: 20px;
+  color: #ffffff;
+  line-height: 1.5;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.5);
+  word-break: keep-all;
+  white-space: pre-wrap;
+}
+
+#udemy-thai-overlay .original-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 3px;
+  font-family: Arial, sans-serif;
+}
