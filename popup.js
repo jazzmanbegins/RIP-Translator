@@ -7,6 +7,7 @@ const defaults = {
   bgOpacity: 78,
   showOriginal: false,
   targetLang: 'th',
+  sourceLang: 'auto',
 };
 
 function updateBgPreview(opacity) {
@@ -34,6 +35,7 @@ chrome.storage.sync.get(['enabled', 'settings'], result => {
   $('bgOpacity').value = s.bgOpacity ?? 78;
   $('bgOpacityVal').textContent = (s.bgOpacity ?? 78) + '%';
   $('targetLang').value = s.targetLang;
+  $('sourceLang').value = s.sourceLang || 'auto';
 
   updateBgPreview(s.bgOpacity ?? 78);
   updateStatus(enabled);
@@ -48,6 +50,7 @@ function getSettings() {
     bgOpacity: parseInt($('bgOpacity').value),
     showOriginal: $('showOriginal').checked,
     targetLang: $('targetLang').value,
+    sourceLang: $('sourceLang').value,
   };
 }
 
@@ -75,6 +78,7 @@ $('fontSize').addEventListener('input', e => { $('fontSizeVal').textContent = e.
 $('bgOpacity').addEventListener('input', e => { $('bgOpacityVal').textContent = e.target.value + '%'; updateBgPreview(parseInt(e.target.value)); saveAndSend(); });
 $('textColor').addEventListener('input', saveAndSend);
 $('targetLang').addEventListener('change', saveAndSend);
+$('sourceLang').addEventListener('change', saveAndSend);
 
 // ── Collect subtitles ─────────────────────────────────────────────────────────
 

@@ -10,12 +10,16 @@ let resizeHandler = null;
 let pollInterval  = null;
 let translateTimeout = null;
 let isEnabled    = true;
+const subtitleLog = [];
+let lastLogged   = '';
+let isCollecting = false;
 let settings = {
   fontSize: 22,
   textColor: '#ffffff',
   bgColor: 'rgba(0,0,0,0.78)',
   showOriginal: false,
   targetLang: 'th',
+  sourceLang: 'auto',
 };
 
 // ─── Font ─────────────────────────────────────────────────────────────────────
@@ -33,6 +37,30 @@ chrome.storage.sync.get(['enabled', 'settings'], (r) => {
   if (r.enabled !== undefined) isEnabled = r.enabled;
   if (r.settings) settings = { ...settings, ...r.settings };
   waitForPlayer();
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // Only the frame that has the active player (overlay created) should respond
+  if (!overlay) return false;
+  if (msg.type === 'getLog') {
+    sendResponse({ log: subtitleLog, count: subtitleLog.length, collecting: isCollecting });
+  }
+  if (msg.type === 'startCollect') {
+    subtitleLog.length = 0;
+    lastLogged = '';
+    isCollecting = true;
+    sendResponse({ ok: true });
+  }
+  if (msg.type === 'stopCollect') {
+    isCollecting = false;
+    sendResponse({ ok: true });
+  }
+  if (msg.type === 'clearLog') {
+    subtitleLog.length = 0;
+    lastLogged = '';
+    sendResponse({ ok: true });
+  }
+  return true;
 });
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -184,6 +212,10 @@ function showOverlay(thai, orig) {
   overlay.querySelector('.orig-line').textContent = orig;
   overlay.style.opacity = '1';
   positionOverlay();
+  if (isCollecting && thai && thai !== lastLogged) {
+    subtitleLog.push(thai);
+    lastLogged = thai;
+  }
 }
 
 function hideOverlay() {
@@ -242,13 +274,15 @@ function scheduleTranslation(text) {
 
 async function translateText(text) {
   if (!text || text.length < 2) return;
-  const key = `${settings.targetLang}|${text.trim()}`;
+  const key = `${settings.sourceLang}|${settings.targetLang}|${text.trim()}`;
   if (cache.has(key)) {
     if (currentText === text) showOverlay(cache.get(key), settings.showOriginal ? text : '');
     return;
   }
   try {
-    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='
+    const sl = settings.sourceLang || 'auto';
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl='
+      + encodeURIComponent(sl) + '&tl='
       + encodeURIComponent(settings.targetLang) + '&dt=t&q=' + encodeURIComponent(text);
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);

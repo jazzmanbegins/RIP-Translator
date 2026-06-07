@@ -24,6 +24,7 @@ let settings = {
   bgColor: 'rgba(0,0,0,0.78)',
   showOriginal: false,
   targetLang: 'th',
+  sourceLang: 'auto',
 };
 
 // ─── Load Noto Sans Thai from Google Fonts into the page ─────────────────────
@@ -87,10 +88,11 @@ chrome.storage.onChanged.addListener((changes) => {
     }
   }
   if (changes.settings) {
-    const prev = settings.targetLang;
+    const prevTl = settings.targetLang;
+    const prevSl = settings.sourceLang;
     settings = { ...settings, ...changes.settings.newValue };
     applyStyles();
-    if (prev !== settings.targetLang) {
+    if (prevTl !== settings.targetLang || prevSl !== settings.sourceLang) {
       cache.clear();
       currentText = '';
     }
@@ -388,7 +390,7 @@ async function translateText(text) {
     return;
   }
 
-  const key = `${settings.targetLang}|${text.trim()}`;
+  const key = `${settings.sourceLang}|${settings.targetLang}|${text.trim()}`;
   if (cache.has(key)) {
     if (currentText === text) showTranslation(cache.get(key), settings.showOriginal ? text : '');
     return;
@@ -406,9 +408,10 @@ async function translateText(text) {
 }
 
 async function googleTranslate(text, tl) {
+  const sl = settings.sourceLang || 'auto';
   const url =
     'https://translate.googleapis.com/translate_a/single' +
-    '?client=gtx&sl=auto&tl=' + encodeURIComponent(tl) +
+    '?client=gtx&sl=' + encodeURIComponent(sl) + '&tl=' + encodeURIComponent(tl) +
     '&dt=t&q=' + encodeURIComponent(text);
   const res = await fetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
