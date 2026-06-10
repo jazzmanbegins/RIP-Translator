@@ -4,9 +4,19 @@
 //   [class*="captions-container"]       — Udemy's caption display (we hide this)
 //   [class*="video-container"]          — video wrapper for overlay positioning
 
-const CAPTION_SELECTOR = '[data-purpose="captions-cue-text"]';
-const CAPTION_CONTAINER_SELECTOR = '[class*="captions-container"]';
+// Learning player: [data-purpose="captions-cue-text"]
+// Course preview (landing page): [class*="_cue-text_"]
+const CAPTION_SELECTOR = '[data-purpose="captions-cue-text"], [class*="_cue-text_"]';
+const CAPTION_CONTAINER_SELECTOR = '[class*="captions-container"], [class*="_caption-container_"]';
 const VIDEO_CONTAINER_SELECTOR = '[class*="video-container"]';
+
+function findVideoRef() {
+  return (
+    document.querySelector('[data-purpose="media-player-container"]') ||
+    document.querySelector(VIDEO_CONTAINER_SELECTOR) ||
+    document.querySelector('video')
+  );
+}
 
 const cache = new Map();
 let overlay = null;
@@ -99,13 +109,30 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
+let preInitObserver = null;
+
 function waitForPlayer() {
+  // Fast path: player already in DOM
+  if (findVideoRef()) { init(); return; }
+
+  // Watch for dynamically loaded players (landing page modals, promo video)
+  if (preInitObserver) preInitObserver.disconnect();
+  preInitObserver = new MutationObserver(() => {
+    if (overlay) { preInitObserver.disconnect(); return; }
+    if (findVideoRef() || document.querySelector(CAPTION_SELECTOR)) {
+      preInitObserver.disconnect();
+      init();
+    }
+  });
+  preInitObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Fallback poll (40 × 500 ms = 20 s)
   let attempts = 0;
   const check = setInterval(() => {
     attempts++;
-    if (document.querySelector(VIDEO_CONTAINER_SELECTOR)) {
+    if (overlay || findVideoRef() || document.querySelector(CAPTION_SELECTOR)) {
       clearInterval(check);
-      init();
+      if (!overlay) init();
     }
     if (attempts > 40) clearInterval(check);
   }, 500);
@@ -128,7 +155,8 @@ function hideUdemyCaptions(hide) {
       captionHideStyle = document.createElement('style');
       captionHideStyle.id = 'udemy-thai-hide-captions';
       captionHideStyle.textContent = `
-        [class*="captions-container"] { visibility: hidden !important; }
+        [class*="captions-container"],
+        [class*="_caption-container_"] { visibility: hidden !important; }
       `;
       document.head.appendChild(captionHideStyle);
     }
@@ -299,9 +327,8 @@ function positionOverlay() {
 
   const fsEl = document.fullscreenElement;
   const ref = fsEl || document;
-  const vc = ref.querySelector
-    ? ref.querySelector(VIDEO_CONTAINER_SELECTOR)
-    : document.querySelector(VIDEO_CONTAINER_SELECTOR);
+  const vc = (ref.querySelector ? ref.querySelector(VIDEO_CONTAINER_SELECTOR) : null) ||
+             findVideoRef();
 
   if (vc) {
     const r = vc.getBoundingClientRect();
@@ -354,6 +381,7 @@ function startObserver() {
 
 function stopObserver() {
   observer?.disconnect(); observer = null;
+  preInitObserver?.disconnect(); preInitObserver = null;
   clearInterval(pollInterval); pollInterval = null;
 }
 
