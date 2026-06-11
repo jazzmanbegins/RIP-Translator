@@ -546,7 +546,7 @@ function runWhisperCycle() {
   rec.onerror = e => console.warn('[RIP Whisper]', e.error?.message);
 
   rec.start(); // no timeslice
-  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 4000);
+  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 2000);
 }
 
 function stopWhisperMode() {
