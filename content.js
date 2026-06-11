@@ -534,6 +534,8 @@ function runWhisperCycle() {
       const { text } = await res.json();
       if (!text || text.trim().length < 2) return;
       const trimmed = text.trim();
+      // Show English immediately, replace with target language when ready
+      showTranslation(trimmed, '');
       const translated = await googleTranslate(trimmed, settings.targetLang);
       if (translated) showTranslation(translated, settings.showOriginal ? trimmed : '');
     } catch (err) {
