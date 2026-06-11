@@ -222,6 +222,18 @@ chrome.storage.local.get(['whisperUrl'], r => {
   checkServerStatus(r.whisperUrl || 'http://localhost:5000');
 });
 
+// Launch server via registered ripwhisper:// protocol handler
+// One-time setup: run install_protocol.bat first
+$('srvBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = 'ripwhisper://start';
+  a.click();
+  // Re-check server status after a few seconds
+  const url = $('whisperUrl').value || 'http://localhost:5000';
+  setTimeout(() => checkServerStatus(url), 4000);
+  setTimeout(() => checkServerStatus(url), 8000);
+});
+
 $('whisperBtn').addEventListener('click', () => {
   getActiveTab(tab => {
     if (whisperRunning) {

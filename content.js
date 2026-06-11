@@ -479,16 +479,14 @@ setInterval(() => {
 let whisperActive = false;
 let whisperRecorder = null;
 let whisperServerUrl = 'http://localhost:5000';
+let whisperStream = null;
 
 async function startWhisperMode(serverUrl) {
-  // Ping server first — fast fail with clear error
   try {
-    const probe = await fetch(serverUrl + '/health', {
-      signal: AbortSignal.timeout(3000),
-    });
+    const probe = await fetch(serverUrl + '/health', { signal: AbortSignal.timeout(3000) });
     if (!probe.ok) throw new Error('server returned ' + probe.status);
   } catch (e) {
-    return { ok: false, error: 'Server ไม่ตอบ — รัน start_server.bat ก่อน' };
+    return { ok: false, error: 'Server ไม่ตอบ — กด ▶ Server ในหน้าต่าง RIP Translator' };
   }
 
   const video = document.querySelector('video');
@@ -496,36 +494,42 @@ async function startWhisperMode(serverUrl) {
 
   stopWhisperMode();
   if (!overlay) createOverlay();
-
   whisperServerUrl = serverUrl;
 
   try {
-    attachWhisperRecorder(video);
+    // Capture stream once; reuse across all cycles
+    whisperStream = video.captureStream();
+    const audioTracks = whisperStream.getAudioTracks();
+    if (!audioTracks.length) return { ok: false, error: 'ไม่พบ audio track (DRM?)' };
+
     whisperActive = true;
+    runWhisperCycle();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message };
   }
 }
 
-function attachWhisperRecorder(video) {
-  const stream = video.captureStream();
-  const audioTracks = stream.getAudioTracks();
-  if (!audioTracks.length) throw new Error('ไม่พบ audio track (DRM?)');
+// Manual cycle: start() → stop after 4 s → ondataavailable fires → repeat
+// Avoids Chrome/Windows bug where start(timeslice) fires only once
+function runWhisperCycle() {
+  if (!whisperActive || !whisperStream) return;
 
-  const audioStream = new MediaStream(audioTracks);
+  const audioTracks = whisperStream.getAudioTracks().filter(t => t.readyState === 'live');
+  if (!audioTracks.length) return;
+
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus' : 'audio/webm';
+  const rec = new MediaRecorder(new MediaStream(audioTracks), { mimeType });
+  whisperRecorder = rec;
 
-  whisperRecorder = new MediaRecorder(audioStream, { mimeType });
-
-  whisperRecorder.ondataavailable = async (e) => {
-    if (e.data.size < 500) return;
+  rec.ondataavailable = async (e) => {
+    if (!whisperActive || e.data.size < 500) return;
     try {
       const wav = await webmToWav16k(e.data);
-      const formData = new FormData();
-      formData.append('audio', wav, 'chunk.wav');
-      const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: formData });
+      const fd = new FormData();
+      fd.append('audio', wav, 'chunk.wav');
+      const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: fd });
       if (!res.ok) return;
       const { text } = await res.json();
       if (!text || text.trim().length < 2) return;
@@ -537,18 +541,12 @@ function attachWhisperRecorder(video) {
     }
   };
 
-  // Auto-restart if the recorder stops unexpectedly
-  whisperRecorder.onstop = () => {
-    if (!whisperActive) return;
-    const v = document.querySelector('video');
-    if (v) setTimeout(() => attachWhisperRecorder(v), 300);
-  };
+  // onstop fires after stop() — start next cycle immediately
+  rec.onstop = () => { if (whisperActive) runWhisperCycle(); };
+  rec.onerror = e => console.warn('[RIP Whisper]', e.error?.message);
 
-  whisperRecorder.onerror = (e) => {
-    console.warn('[RIP Whisper] recorder error:', e.error?.message);
-  };
-
-  whisperRecorder.start(4000); // 4-second chunks
+  rec.start(); // no timeslice
+  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 4000);
 }
 
 function stopWhisperMode() {
@@ -556,6 +554,10 @@ function stopWhisperMode() {
   if (whisperRecorder) {
     try { whisperRecorder.stop(); } catch (_) {}
     whisperRecorder = null;
+  }
+  if (whisperStream) {
+    whisperStream.getTracks().forEach(t => t.stop());
+    whisperStream = null;
   }
 }
 
