@@ -21,19 +21,22 @@ RIP Translator — Local Whisper Server
 """
 
 import os
+import sys
 import tempfile
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from faster_whisper import WhisperModel
 
-MODEL_SIZE = "base"  # เปลี่ยนเป็น "small" หรือ "medium" เพื่อความแม่นยำสูงขึ้น
+MODEL_SIZE = "base"  # change to "small" or "medium" for better accuracy
 
-print(f"[RIP] กำลังโหลด Whisper model '{MODEL_SIZE}' ...")
+print(f"[RIP] Loading Whisper model '{MODEL_SIZE}' ...", flush=True)
+print("[RIP] (first run downloads ~74 MB — please wait)", flush=True)
 model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-print(f"[RIP] พร้อมใช้งาน — http://127.0.0.1:5000")
+print("[RIP] Model ready!", flush=True)
+print("[RIP] Server running at http://127.0.0.1:5000", flush=True)
 
 app = Flask(__name__)
-CORS(app, origins=["chrome-extension://*", "http://localhost", "http://127.0.0.1"])
+CORS(app)  # content scripts run under the page's origin (e.g. udemy.com), allow all
 
 
 @app.route("/health")
