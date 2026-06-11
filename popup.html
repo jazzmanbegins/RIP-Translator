@@ -539,18 +539,33 @@
       <strong>🎙 Whisper Mode</strong>
       <span class="whisper-hint">สำหรับวิดีโอที่ไม่มี subtitle</span>
     </div>
+
+    <!-- Groq API (fast + accurate, recommended) -->
     <div class="row">
-      <label style="flex-shrink:0">Server</label>
-      <input type="text" id="whisperUrl" class="url-input" placeholder="http://localhost:5000" value="http://localhost:5000">
+      <label style="flex-shrink:0;color:var(--accent)">Groq Key</label>
+      <input type="password" id="groqKey" class="url-input"
+             placeholder="gsk_... (เร็ว+แม่น, ฟรี)">
     </div>
-    <div class="whisper-foot">
-      <button class="btn-srv"    id="srvBtn">▶ Server</button>
+    <div style="font-size:10px;color:var(--muted);margin-top:-4px">
+      รับฟรี: <strong style="color:var(--text)">console.groq.com</strong>
+      &nbsp;·&nbsp; ถ้ามี Key จะข้ามไม่ใช้ Server
+    </div>
+
+    <!-- Local server (fallback) -->
+    <div class="row" style="margin-top:4px">
+      <label style="flex-shrink:0">Server</label>
+      <input type="text" id="whisperUrl" class="url-input"
+             placeholder="http://localhost:5000" value="http://localhost:5000">
+    </div>
+
+    <div class="whisper-foot" style="margin-top:4px">
+      <button class="btn-srv"     id="srvBtn">▶ Server</button>
       <button class="btn-whisper" id="whisperBtn">🎙 Start</button>
       <span id="whisperStatus" class="w-idle">● Idle</span>
     </div>
     <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-top:2px">
       Server: <span id="srvStatus" style="color:#ef4444">● ไม่ได้รัน</span>
-      &nbsp;·&nbsp;ครั้งแรก: รัน <strong style="color:var(--text)">install_protocol.bat</strong> 1 ครั้ง
+      &nbsp;·&nbsp;ครั้งแรก: รัน <strong style="color:var(--text)">install_protocol.bat</strong>
     </div>
   </div>
 

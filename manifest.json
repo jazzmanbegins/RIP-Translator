@@ -15,7 +15,8 @@
     "https://www.domestika.org/*",
     "https://translate.googleapis.com/*",
     "http://localhost:*/*",
-    "http://127.0.0.1:*/*"
+    "http://127.0.0.1:*/*",
+    "https://api.groq.com/*"
   ],
   "content_scripts": [
     {

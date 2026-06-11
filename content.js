@@ -82,7 +82,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true });
   }
   if (msg.type === 'whisperStart') {
-    startWhisperMode(msg.serverUrl || 'http://localhost:5000').then(sendResponse);
+    startWhisperMode(msg.serverUrl || 'http://localhost:5000', msg.groqKey || '').then(sendResponse);
   }
   if (msg.type === 'whisperStop') {
     stopWhisperMode();
@@ -479,14 +479,20 @@ setInterval(() => {
 let whisperActive = false;
 let whisperRecorder = null;
 let whisperServerUrl = 'http://localhost:5000';
+let whisperGroqKey = '';
 let whisperStream = null;
 
-async function startWhisperMode(serverUrl) {
-  try {
-    const probe = await fetch(serverUrl + '/health', { signal: AbortSignal.timeout(3000) });
-    if (!probe.ok) throw new Error('server returned ' + probe.status);
-  } catch (e) {
-    return { ok: false, error: 'Server ไม่ตอบ — กด ▶ Server ในหน้าต่าง RIP Translator' };
+async function startWhisperMode(serverUrl, groqKey) {
+  whisperGroqKey = groqKey || '';
+
+  if (!whisperGroqKey) {
+    // No Groq key — check local server
+    try {
+      const probe = await fetch(serverUrl + '/health', { signal: AbortSignal.timeout(3000) });
+      if (!probe.ok) throw new Error('server returned ' + probe.status);
+    } catch (e) {
+      return { ok: false, error: 'Server ไม่ตอบ — กด ▶ Server หรือใส่ Groq API Key' };
+    }
   }
 
   const video = document.querySelector('video');
@@ -527,17 +533,12 @@ function runWhisperCycle() {
     if (!whisperActive || e.data.size < 500) return;
     try {
       const wav = await webmToWav16k(e.data);
-      const fd = new FormData();
-      fd.append('audio', wav, 'chunk.wav');
-      const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: fd });
-      if (!res.ok) return;
-      const { text } = await res.json();
-      if (!text || text.trim().length < 2) return;
-      const trimmed = text.trim();
-      // Show English immediately, replace with target language when ready
-      showTranslation(trimmed, '');
-      const translated = await googleTranslate(trimmed, settings.targetLang);
-      if (translated) showTranslation(translated, settings.showOriginal ? trimmed : '');
+      const raw = await transcribeAudio(wav);
+      if (!raw || raw.length < 2) return;
+      // Show source text immediately, replace when translation ready
+      showTranslation(raw, '');
+      const translated = await googleTranslate(raw, settings.targetLang);
+      if (translated) showTranslation(translated, settings.showOriginal ? raw : '');
     } catch (err) {
       console.warn('[RIP Whisper]', err.message);
     }
@@ -561,6 +562,32 @@ function stopWhisperMode() {
     whisperStream.getTracks().forEach(t => t.stop());
     whisperStream = null;
   }
+}
+
+// ─── Transcription (Groq API or local server) ────────────────────────────────
+
+async function transcribeAudio(wav) {
+  const fd = new FormData();
+  fd.append('file', wav, 'chunk.wav');   // Groq uses 'file'
+  fd.append('audio', wav, 'chunk.wav');  // local server uses 'audio'
+
+  if (whisperGroqKey) {
+    fd.delete('audio');
+    fd.append('model', 'whisper-large-v3-turbo');
+    fd.append('response_format', 'json');
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + whisperGroqKey },
+      body: fd,
+    });
+    if (!res.ok) throw new Error('Groq ' + res.status);
+    return (await res.json()).text?.trim() || '';
+  }
+
+  fd.delete('file');
+  const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error('Server ' + res.status);
+  return (await res.json()).text?.trim() || '';
 }
 
 // ─── Audio helpers (WebM → 16 kHz mono WAV, no ffmpeg needed) ────────────────

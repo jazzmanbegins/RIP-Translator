@@ -187,13 +187,13 @@ function setWhisperUI(running, errorMsg) {
   }
 }
 
-// Load saved server URL
-chrome.storage.local.get(['whisperUrl'], result => {
+// Load saved keys
+chrome.storage.local.get(['whisperUrl', 'groqKey'], result => {
   if (result.whisperUrl) $('whisperUrl').value = result.whisperUrl;
+  if (result.groqKey)    $('groqKey').value    = result.groqKey;
 });
-$('whisperUrl').addEventListener('change', e => {
-  chrome.storage.local.set({ whisperUrl: e.target.value });
-});
+$('whisperUrl').addEventListener('change', e => chrome.storage.local.set({ whisperUrl: e.target.value }));
+$('groqKey').addEventListener('change',    e => chrome.storage.local.set({ groqKey:    e.target.value }));
 
 // Check server + whisper state on popup open
 function checkServerStatus(url) {
@@ -243,8 +243,9 @@ $('whisperBtn').addEventListener('click', () => {
       });
     } else {
       const serverUrl = $('whisperUrl').value.trim() || 'http://localhost:5000';
-      chrome.storage.local.set({ whisperUrl: serverUrl });
-      chrome.tabs.sendMessage(tab.id, { type: 'whisperStart', serverUrl }, res => {
+      const groqKey   = $('groqKey').value.trim();
+      chrome.storage.local.set({ whisperUrl: serverUrl, groqKey });
+      chrome.tabs.sendMessage(tab.id, { type: 'whisperStart', serverUrl, groqKey }, res => {
         if (chrome.runtime.lastError || !res) {
           setWhisperUI(false, 'ไม่สามารถเชื่อมต่อ tab');
           return;
