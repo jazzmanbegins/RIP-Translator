@@ -261,84 +261,6 @@
     .status-rec  { font-size: 11px; color: #ef4444; font-weight: 600; animation: blink 1.2s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
     .collect-count { font-size: 12px; color: var(--accent); font-weight: 600; }
-
-    /* ── Whisper section ────────────────────── */
-    .whisper-section {
-      padding: 10px 14px 13px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-    .whisper-title {
-      display: flex;
-      align-items: baseline;
-      gap: 7px;
-    }
-    .whisper-title strong {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .whisper-hint {
-      font-size: 10px;
-      color: var(--muted);
-    }
-    .url-input {
-      flex: 1;
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 5px 8px;
-      font-size: 11px;
-      font-family: 'Noto Sans', sans-serif;
-      min-width: 0;
-    }
-    .url-input:focus { outline: 1px solid #3b82f6; }
-    .whisper-foot {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .btn-whisper {
-      background: #1e3a5f;
-      color: #93c5fd;
-      border: 1px solid #2d5a8e;
-      border-radius: 6px;
-      padding: 6px 13px;
-      font-size: 12px;
-      font-family: 'Noto Sans', sans-serif;
-      cursor: pointer;
-      font-weight: 500;
-      white-space: nowrap;
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
-    .btn-whisper:hover { opacity: 0.85; }
-    .btn-whisper.active {
-      background: #7f1d1d;
-      border-color: #ef4444;
-      color: #fca5a5;
-    }
-    .btn-srv {
-      background: #14532d;
-      color: #86efac;
-      border: 1px solid #166534;
-      border-radius: 6px;
-      padding: 6px 11px;
-      font-size: 12px;
-      font-family: 'Noto Sans', sans-serif;
-      cursor: pointer;
-      font-weight: 500;
-      white-space: nowrap;
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
-    .btn-srv:hover { opacity: 0.85; }
-    .w-idle    { font-size: 11px; color: var(--muted); }
-    .w-running { font-size: 11px; color: #60a5fa; font-weight: 600; animation: blink 1.2s infinite; }
-    .w-error   { font-size: 11px; color: #ef4444; }
   </style>
 </head>
 <body>
@@ -530,42 +452,6 @@
     <div class="export-row" style="margin-top:8px">
       <button class="btn btn-ghost" id="clearBtn" disabled>Clear</button>
       <button class="btn btn-primary" id="saveBtn" disabled>⬇ Save .txt</button>
-    </div>
-  </div>
-
-  <!-- Whisper Mode -->
-  <div class="whisper-section">
-    <div class="whisper-title">
-      <strong>🎙 Whisper Mode</strong>
-      <span class="whisper-hint">สำหรับวิดีโอที่ไม่มี subtitle</span>
-    </div>
-
-    <!-- Groq API (fast + accurate, recommended) -->
-    <div class="row">
-      <label style="flex-shrink:0;color:var(--accent)">Groq Key</label>
-      <input type="password" id="groqKey" class="url-input"
-             placeholder="gsk_... (เร็ว+แม่น, ฟรี)">
-    </div>
-    <div style="font-size:10px;color:var(--muted);margin-top:-4px">
-      รับฟรี: <strong style="color:var(--text)">console.groq.com</strong>
-      &nbsp;·&nbsp; ถ้ามี Key จะข้ามไม่ใช้ Server
-    </div>
-
-    <!-- Local server (fallback) -->
-    <div class="row" style="margin-top:4px">
-      <label style="flex-shrink:0">Server</label>
-      <input type="text" id="whisperUrl" class="url-input"
-             placeholder="http://localhost:5000" value="http://localhost:5000">
-    </div>
-
-    <div class="whisper-foot" style="margin-top:4px">
-      <button class="btn-srv"     id="srvBtn">▶ Server</button>
-      <button class="btn-whisper" id="whisperBtn">🎙 Start</button>
-      <span id="whisperStatus" class="w-idle">● Idle</span>
-    </div>
-    <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-top:2px">
-      Server: <span id="srvStatus" style="color:#ef4444">● ไม่ได้รัน</span>
-      &nbsp;·&nbsp;ครั้งแรก: รัน <strong style="color:var(--text)">install_protocol.bat</strong>
     </div>
   </div>
 
