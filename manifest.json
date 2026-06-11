@@ -13,7 +13,9 @@
     "https://gamedev.tv/*",
     "https://iframe.mediadelivery.net/*",
     "https://www.domestika.org/*",
-    "https://translate.googleapis.com/*"
+    "https://translate.googleapis.com/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
   ],
   "content_scripts": [
     {

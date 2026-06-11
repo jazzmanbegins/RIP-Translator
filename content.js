@@ -81,6 +81,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     lastLogged = '';
     sendResponse({ ok: true });
   }
+  if (msg.type === 'whisperStart') {
+    const result = startWhisperMode(msg.serverUrl || 'http://localhost:5000');
+    sendResponse(result);
+  }
+  if (msg.type === 'whisperStop') {
+    stopWhisperMode();
+    sendResponse({ ok: true });
+  }
+  if (msg.type === 'whisperStatus') {
+    sendResponse({ active: whisperActive });
+  }
   return true;
 });
 
@@ -459,9 +470,68 @@ setInterval(() => {
     currentText = '';
     destroyOverlay();
     stopObserver();
+    stopWhisperMode();
     if (isEnabled) setTimeout(waitForPlayer, 1500);
   }
 }, 1000);
+
+// ─── Whisper Mode ─────────────────────────────────────────────────────────────
+
+let whisperActive = false;
+let whisperRecorder = null;
+
+function startWhisperMode(serverUrl) {
+  const video = document.querySelector('video');
+  if (!video) return { ok: false, error: 'ไม่พบ video บนหน้านี้' };
+
+  stopWhisperMode();
+
+  // Ensure overlay exists for displaying results
+  if (!overlay) createOverlay();
+
+  try {
+    const stream = video.captureStream();
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) return { ok: false, error: 'ไม่พบ audio track (อาจถูก DRM บล็อก)' };
+
+    const audioStream = new MediaStream(audioTracks);
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm';
+
+    whisperRecorder = new MediaRecorder(audioStream, { mimeType });
+
+    whisperRecorder.ondataavailable = async (e) => {
+      if (e.data.size < 2000) return; // skip silence / empty chunks
+      try {
+        const formData = new FormData();
+        formData.append('audio', e.data, 'chunk.webm');
+        const res = await fetch(serverUrl + '/transcribe', { method: 'POST', body: formData });
+        if (!res.ok) return;
+        const { text } = await res.json();
+        if (!text || text.trim().length < 2) return;
+        const trimmed = text.trim();
+        const translated = await googleTranslate(trimmed, settings.targetLang);
+        if (translated) showTranslation(translated, settings.showOriginal ? trimmed : '');
+      } catch (err) {
+        console.warn('[RIP Whisper]', err.message);
+      }
+    };
+
+    whisperRecorder.start(6000); // 6-second chunks
+    whisperActive = true;
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function stopWhisperMode() {
+  if (whisperRecorder) {
+    try { whisperRecorder.stop(); } catch (_) {}
+    whisperRecorder = null;
+  }
+  whisperActive = false;
+}
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 

@@ -166,3 +166,66 @@ $('clearBtn').addEventListener('click', () => {
     });
   });
 });
+
+// ── Whisper Mode ──────────────────────────────────────────────────────────────
+
+let whisperRunning = false;
+
+function setWhisperUI(running, errorMsg) {
+  const btn    = $('whisperBtn');
+  const status = $('whisperStatus');
+  if (running) {
+    btn.textContent = '⏹ Stop';
+    btn.className   = 'btn-whisper active';
+    status.className = 'w-running';
+    status.textContent = '● Running';
+  } else {
+    btn.textContent = '🎙 Start';
+    btn.className   = 'btn-whisper';
+    status.className = errorMsg ? 'w-error' : 'w-idle';
+    status.textContent = errorMsg ? '✕ ' + errorMsg : '● Idle';
+  }
+}
+
+// Load saved server URL
+chrome.storage.local.get(['whisperUrl'], result => {
+  if (result.whisperUrl) $('whisperUrl').value = result.whisperUrl;
+});
+$('whisperUrl').addEventListener('change', e => {
+  chrome.storage.local.set({ whisperUrl: e.target.value });
+});
+
+// Sync state on popup open
+getActiveTab(tab => {
+  chrome.tabs.sendMessage(tab.id, { type: 'whisperStatus' }, res => {
+    if (chrome.runtime.lastError || !res) return;
+    whisperRunning = res.active;
+    setWhisperUI(whisperRunning);
+  });
+});
+
+$('whisperBtn').addEventListener('click', () => {
+  getActiveTab(tab => {
+    if (whisperRunning) {
+      chrome.tabs.sendMessage(tab.id, { type: 'whisperStop' }, () => {
+        whisperRunning = false;
+        setWhisperUI(false);
+      });
+    } else {
+      const serverUrl = $('whisperUrl').value.trim() || 'http://localhost:5000';
+      chrome.storage.local.set({ whisperUrl: serverUrl });
+      chrome.tabs.sendMessage(tab.id, { type: 'whisperStart', serverUrl }, res => {
+        if (chrome.runtime.lastError || !res) {
+          setWhisperUI(false, 'ไม่สามารถเชื่อมต่อ tab');
+          return;
+        }
+        if (res.ok) {
+          whisperRunning = true;
+          setWhisperUI(true);
+        } else {
+          setWhisperUI(false, res.error || 'Error');
+        }
+      });
+    }
+  });
+});
