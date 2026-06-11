@@ -195,13 +195,31 @@ $('whisperUrl').addEventListener('change', e => {
   chrome.storage.local.set({ whisperUrl: e.target.value });
 });
 
-// Sync state on popup open
+// Check server + whisper state on popup open
+function checkServerStatus(url) {
+  const el = $('srvStatus');
+  fetch(url + '/health', { signal: AbortSignal.timeout(2000) })
+    .then(r => {
+      el.textContent = r.ok ? '● รันอยู่' : '● error';
+      el.style.color  = r.ok ? '#4ade80' : '#ef4444';
+    })
+    .catch(() => {
+      el.textContent = '● ไม่ได้รัน';
+      el.style.color  = '#ef4444';
+    });
+}
+
 getActiveTab(tab => {
   chrome.tabs.sendMessage(tab.id, { type: 'whisperStatus' }, res => {
     if (chrome.runtime.lastError || !res) return;
     whisperRunning = res.active;
     setWhisperUI(whisperRunning);
   });
+});
+
+// Ping server directly from popup (no content script needed)
+chrome.storage.local.get(['whisperUrl'], r => {
+  checkServerStatus(r.whisperUrl || 'http://localhost:5000');
 });
 
 $('whisperBtn').addEventListener('click', () => {

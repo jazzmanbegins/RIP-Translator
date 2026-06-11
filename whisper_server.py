@@ -4,7 +4,7 @@ RIP Translator — Local Whisper Server
 ======================================
 
 ติดตั้ง (ครั้งแรกครั้งเดียว):
-  pip install faster-whisper flask flask-cors
+  pip install faster-whisper flask flask-cors soundfile numpy
 
 รัน:
   python whisper_server.py
@@ -20,9 +20,10 @@ RIP Translator — Local Whisper Server
   medium ~769 MB  แม่นที่สุดสำหรับ CPU
 """
 
-import os
+import io
 import sys
-import tempfile
+import numpy as np
+import soundfile as sf
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from faster_whisper import WhisperModel
@@ -49,28 +50,24 @@ def transcribe():
     if "audio" not in request.files:
         return jsonify({"error": "No audio file"}), 400
 
-    audio_file = request.files["audio"]
-
-    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-        audio_file.save(tmp.name)
-        tmp_path = tmp.name
-
     try:
+        # Receive WAV (converted in browser) — no ffmpeg needed
+        raw = io.BytesIO(request.files["audio"].read())
+        audio, sr = sf.read(raw, dtype="float32")
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)  # stereo → mono
+
         segments, info = model.transcribe(
-            tmp_path,
+            audio,
             beam_size=3,
-            language=None,      # auto-detect language
-            vad_filter=True,    # skip silence automatically
+            language=None,
+            vad_filter=True,
         )
-        text = " ".join(seg.text.strip() for seg in segments).strip()
+        text = " ".join(s.text.strip() for s in segments).strip()
         return jsonify({"text": text, "language": info.language})
     except Exception as e:
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
 
 
 if __name__ == "__main__":

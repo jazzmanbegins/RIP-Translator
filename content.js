@@ -522,8 +522,9 @@ function attachWhisperRecorder(video) {
   whisperRecorder.ondataavailable = async (e) => {
     if (e.data.size < 500) return;
     try {
+      const wav = await webmToWav16k(e.data);
       const formData = new FormData();
-      formData.append('audio', e.data, 'chunk.webm');
+      formData.append('audio', wav, 'chunk.wav');
       const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: formData });
       if (!res.ok) return;
       const { text } = await res.json();
@@ -556,6 +557,40 @@ function stopWhisperMode() {
     try { whisperRecorder.stop(); } catch (_) {}
     whisperRecorder = null;
   }
+}
+
+// ─── Audio helpers (WebM → 16 kHz mono WAV, no ffmpeg needed) ────────────────
+
+async function webmToWav16k(blob) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new AudioContext();
+  const decoded = await ctx.decodeAudioData(arrayBuffer);
+  await ctx.close();
+
+  const rate = 16000;
+  const length = Math.ceil(decoded.duration * rate);
+  const offCtx = new OfflineAudioContext(1, length, rate);
+  const src = offCtx.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offCtx.destination);
+  src.start(0);
+  const rendered = await offCtx.startRendering();
+  return pcmToWav(rendered.getChannelData(0), rate);
+}
+
+function pcmToWav(samples, sampleRate) {
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buf);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true);
+  str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, samples.length * 2, true);
+  let o = 44;
+  for (const x of samples) { v.setInt16(o, Math.max(-1, Math.min(1, x)) * 0x7FFF | 0, true); o += 2; }
+  return new Blob([buf], { type: 'audio/wav' });
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
