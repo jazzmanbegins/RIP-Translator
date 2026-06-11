@@ -82,8 +82,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true });
   }
   if (msg.type === 'whisperStart') {
-    const result = startWhisperMode(msg.serverUrl || 'http://localhost:5000');
-    sendResponse(result);
+    startWhisperMode(msg.serverUrl || 'http://localhost:5000').then(sendResponse);
   }
   if (msg.type === 'whisperStop') {
     stopWhisperMode();
@@ -480,19 +479,27 @@ setInterval(() => {
 let whisperActive = false;
 let whisperRecorder = null;
 
-function startWhisperMode(serverUrl) {
+async function startWhisperMode(serverUrl) {
+  // Ping server first — fast fail with clear error
+  try {
+    const probe = await fetch(serverUrl + '/health', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!probe.ok) throw new Error('server returned ' + probe.status);
+  } catch (e) {
+    return { ok: false, error: 'Server ไม่ตอบ — รัน whisper_server.py ก่อน' };
+  }
+
   const video = document.querySelector('video');
   if (!video) return { ok: false, error: 'ไม่พบ video บนหน้านี้' };
 
   stopWhisperMode();
-
-  // Ensure overlay exists for displaying results
   if (!overlay) createOverlay();
 
   try {
     const stream = video.captureStream();
     const audioTracks = stream.getAudioTracks();
-    if (!audioTracks.length) return { ok: false, error: 'ไม่พบ audio track (อาจถูก DRM บล็อก)' };
+    if (!audioTracks.length) return { ok: false, error: 'ไม่พบ audio track (DRM?)' };
 
     const audioStream = new MediaStream(audioTracks);
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -501,7 +508,7 @@ function startWhisperMode(serverUrl) {
     whisperRecorder = new MediaRecorder(audioStream, { mimeType });
 
     whisperRecorder.ondataavailable = async (e) => {
-      if (e.data.size < 2000) return; // skip silence / empty chunks
+      if (e.data.size < 2000) return;
       try {
         const formData = new FormData();
         formData.append('audio', e.data, 'chunk.webm');
@@ -517,7 +524,7 @@ function startWhisperMode(serverUrl) {
       }
     };
 
-    whisperRecorder.start(6000); // 6-second chunks
+    whisperRecorder.start(6000);
     whisperActive = true;
     return { ok: true };
   } catch (e) {
