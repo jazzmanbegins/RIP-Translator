@@ -28,7 +28,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from faster_whisper import WhisperModel
 
-MODEL_SIZE = "base"  # change to "small" or "medium" for better accuracy
+MODEL_SIZE = "tiny"  # tiny=fastest (~39MB), base=balanced, small=accurate
 
 print(f"[RIP] Loading Whisper model '{MODEL_SIZE}' ...", flush=True)
 print("[RIP] (first run downloads ~74 MB — please wait)", flush=True)
@@ -59,9 +59,10 @@ def transcribe():
 
         segments, info = model.transcribe(
             audio,
-            beam_size=3,
-            language=None,
-            vad_filter=True,
+            beam_size=1,                     # greedy — 3x faster than beam_size=3
+            language=None,                   # auto-detect
+            vad_filter=False,                # skip silence detection overhead
+            condition_on_previous_text=False, # no hallucination, faster
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         return jsonify({"text": text, "language": info.language})
