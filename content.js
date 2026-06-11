@@ -478,6 +478,7 @@ setInterval(() => {
 
 let whisperActive = false;
 let whisperRecorder = null;
+let whisperServerUrl = 'http://localhost:5000';
 
 async function startWhisperMode(serverUrl) {
   // Ping server first — fast fail with clear error
@@ -487,7 +488,7 @@ async function startWhisperMode(serverUrl) {
     });
     if (!probe.ok) throw new Error('server returned ' + probe.status);
   } catch (e) {
-    return { ok: false, error: 'Server ไม่ตอบ — รัน whisper_server.py ก่อน' };
+    return { ok: false, error: 'Server ไม่ตอบ — รัน start_server.bat ก่อน' };
   }
 
   const video = document.querySelector('video');
@@ -496,35 +497,10 @@ async function startWhisperMode(serverUrl) {
   stopWhisperMode();
   if (!overlay) createOverlay();
 
+  whisperServerUrl = serverUrl;
+
   try {
-    const stream = video.captureStream();
-    const audioTracks = stream.getAudioTracks();
-    if (!audioTracks.length) return { ok: false, error: 'ไม่พบ audio track (DRM?)' };
-
-    const audioStream = new MediaStream(audioTracks);
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus' : 'audio/webm';
-
-    whisperRecorder = new MediaRecorder(audioStream, { mimeType });
-
-    whisperRecorder.ondataavailable = async (e) => {
-      if (e.data.size < 2000) return;
-      try {
-        const formData = new FormData();
-        formData.append('audio', e.data, 'chunk.webm');
-        const res = await fetch(serverUrl + '/transcribe', { method: 'POST', body: formData });
-        if (!res.ok) return;
-        const { text } = await res.json();
-        if (!text || text.trim().length < 2) return;
-        const trimmed = text.trim();
-        const translated = await googleTranslate(trimmed, settings.targetLang);
-        if (translated) showTranslation(translated, settings.showOriginal ? trimmed : '');
-      } catch (err) {
-        console.warn('[RIP Whisper]', err.message);
-      }
-    };
-
-    whisperRecorder.start(6000);
+    attachWhisperRecorder(video);
     whisperActive = true;
     return { ok: true };
   } catch (e) {
@@ -532,12 +508,54 @@ async function startWhisperMode(serverUrl) {
   }
 }
 
+function attachWhisperRecorder(video) {
+  const stream = video.captureStream();
+  const audioTracks = stream.getAudioTracks();
+  if (!audioTracks.length) throw new Error('ไม่พบ audio track (DRM?)');
+
+  const audioStream = new MediaStream(audioTracks);
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : 'audio/webm';
+
+  whisperRecorder = new MediaRecorder(audioStream, { mimeType });
+
+  whisperRecorder.ondataavailable = async (e) => {
+    if (e.data.size < 500) return;
+    try {
+      const formData = new FormData();
+      formData.append('audio', e.data, 'chunk.webm');
+      const res = await fetch(whisperServerUrl + '/transcribe', { method: 'POST', body: formData });
+      if (!res.ok) return;
+      const { text } = await res.json();
+      if (!text || text.trim().length < 2) return;
+      const trimmed = text.trim();
+      const translated = await googleTranslate(trimmed, settings.targetLang);
+      if (translated) showTranslation(translated, settings.showOriginal ? trimmed : '');
+    } catch (err) {
+      console.warn('[RIP Whisper]', err.message);
+    }
+  };
+
+  // Auto-restart if the recorder stops unexpectedly
+  whisperRecorder.onstop = () => {
+    if (!whisperActive) return;
+    const v = document.querySelector('video');
+    if (v) setTimeout(() => attachWhisperRecorder(v), 300);
+  };
+
+  whisperRecorder.onerror = (e) => {
+    console.warn('[RIP Whisper] recorder error:', e.error?.message);
+  };
+
+  whisperRecorder.start(4000); // 4-second chunks
+}
+
 function stopWhisperMode() {
+  whisperActive = false;
   if (whisperRecorder) {
     try { whisperRecorder.stop(); } catch (_) {}
     whisperRecorder = null;
   }
-  whisperActive = false;
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
