@@ -162,7 +162,7 @@ function applyStyles() {
     zIndex:    '2147483647',
     textAlign: 'center',
     padding:   '8px 16px',
-    maxWidth:  '84vw',
+    maxWidth:  '98vw',
     borderRadius: '6px',
     background: settings.bgColor,
     opacity:   '0',
@@ -177,8 +177,7 @@ function applyStyles() {
     color:      settings.textColor,
     lineHeight: '1.6',
     textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-    whiteSpace: 'pre-wrap',
-    wordBreak:  'keep-all',
+    whiteSpace: 'nowrap',
   });
   Object.assign(overlay.querySelector('.orig-line').style, {
     fontFamily: "'Noto Sans',Arial,sans-serif",
