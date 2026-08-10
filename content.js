@@ -10,6 +10,11 @@ const CAPTION_SELECTOR = '[data-purpose="captions-cue-text"], [class*="_cue-text
 const CAPTION_CONTAINER_SELECTOR = '[class*="captions-container"], [class*="_caption-container_"]';
 const VIDEO_CONTAINER_SELECTOR = '[class*="video-container"]';
 
+// Subtitle wraps onto at most this many lines; long text shrinks to fit
+const MAX_LINES = 2;
+const LINE_HEIGHT = 1.6;
+const MAX_OVERLAY_WIDTH = '70vw';
+
 function findVideoRef() {
   return (
     document.querySelector('[data-purpose="media-player-container"]') ||
@@ -280,7 +285,7 @@ function applyStyles() {
     pointerEvents: 'auto',
     textAlign: 'center',
     padding: '8px 16px',
-    maxWidth: '98vw',
+    maxWidth: MAX_OVERLAY_WIDTH,
     borderRadius: '6px',
     background: settings.bgColor,
     transition: 'opacity 0.15s ease',
@@ -294,9 +299,11 @@ function applyStyles() {
     fontFamily: "'Noto Sans Thai','Noto Sans',Arial,sans-serif",
     fontSize: settings.fontSize + 'px',
     color: settings.textColor,
-    lineHeight: '1.6',
+    lineHeight: String(LINE_HEIGHT),
     textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    overflowWrap: 'break-word',
+    textWrap: 'balance',
   });
 
   Object.assign(overlay.querySelector('.orig-line').style, {
@@ -348,9 +355,22 @@ function positionOverlay() {
   }
 }
 
+// Shrink the font (down to 70% of the chosen size) until the text fits MAX_LINES
+function fitToMaxLines(el) {
+  let size = settings.fontSize;
+  const minSize = Math.max(12, Math.round(settings.fontSize * 0.7));
+  el.style.fontSize = size + 'px';
+  while (size > minSize && el.scrollHeight > Math.ceil(size * LINE_HEIGHT * MAX_LINES) + 1) {
+    size -= 1;
+    el.style.fontSize = size + 'px';
+  }
+}
+
 function showTranslation(thai, original) {
   if (!overlay) return;
-  overlay.querySelector('.th-line').textContent = thai;
+  const thLine = overlay.querySelector('.th-line');
+  thLine.textContent = thai;
+  fitToMaxLines(thLine);
   overlay.querySelector('.orig-line').textContent = original;
   overlay.style.opacity = '1';
   positionOverlay();
