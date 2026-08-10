@@ -185,12 +185,16 @@ function applyStyles() {
     whiteSpace: 'normal',
     overflowWrap: 'break-word',
     textWrap:   'balance',
+    width:      'auto',   // fitToMaxLines() narrows this to the text on every cue
+    marginInline: 'auto',
   });
   Object.assign(overlay.querySelector('.orig-line').style, {
     fontFamily: "'Noto Sans',Arial,sans-serif",
     fontSize:   Math.max(12, settings.fontSize - 6) + 'px',
     color:      'rgba(255,255,255,0.55)',
     marginTop:  '3px',
+    width:      'auto',
+    marginInline: 'auto',
     display:    settings.showOriginal ? 'block' : 'none',
   });
 }
@@ -229,15 +233,55 @@ function positionOverlay(activeCue) {
   }
 }
 
-// Shrink the font (down to 70% of the chosen size) until the text fits MAX_LINES
+// Count the rendered lines of a text element and measure its widest one
+function measureLines(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rows = new Map();
+  for (const r of range.getClientRects()) {
+    if (!r.width || !r.height) continue;
+    const key = Math.round(r.top);
+    const row = rows.get(key);
+    if (row) {
+      row.left  = Math.min(row.left, r.left);
+      row.right = Math.max(row.right, r.right);
+    } else {
+      rows.set(key, { left: r.left, right: r.right });
+    }
+  }
+  let widest = 0;
+  for (const row of rows.values()) widest = Math.max(widest, row.right - row.left);
+  return { lines: rows.size, widest };
+}
+
+// Shrink the font (down to 70% of the chosen size) until the text fits MAX_LINES,
+// then tighten the box to the widest rendered line so no empty background is left
 function fitToMaxLines(el) {
+  el.style.width = 'auto';
   let size = settings.fontSize;
   const minSize = Math.max(12, Math.round(settings.fontSize * 0.7));
   el.style.fontSize = size + 'px';
-  while (size > minSize && el.scrollHeight > Math.ceil(size * LINE_HEIGHT * MAX_LINES) + 1) {
+
+  let m = measureLines(el);
+  if (!m.lines) return;
+
+  while (size > minSize && m.lines > MAX_LINES) {
     size -= 1;
     el.style.fontSize = size + 'px';
+    m = measureLines(el);
   }
+
+  tightenWidth(el);
+}
+
+// Pull the box in to the widest rendered line so the background hugs the text
+function tightenWidth(el) {
+  el.style.width = 'auto';
+  const m = measureLines(el);
+  if (!m.lines) return;
+  el.style.width = Math.ceil(m.widest) + 1 + 'px';
+  // A narrower box can re-wrap the text; fall back to auto width if it did
+  if (measureLines(el).lines > m.lines) el.style.width = 'auto';
 }
 
 function showOverlay(thai, orig, cue) {
@@ -245,7 +289,9 @@ function showOverlay(thai, orig, cue) {
   const thLine = overlay.querySelector('.th-line');
   thLine.textContent = thai;
   fitToMaxLines(thLine);
-  overlay.querySelector('.orig-line').textContent = orig;
+  const origLine = overlay.querySelector('.orig-line');
+  origLine.textContent = orig;
+  if (settings.showOriginal) tightenWidth(origLine);
   overlay.style.opacity = '1';
   positionOverlay(cue);
   if (isCollecting && thai && thai !== lastLogged) {
