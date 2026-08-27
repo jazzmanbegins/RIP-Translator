@@ -24,6 +24,10 @@ function findVideoRef() {
 }
 
 const cache = new Map();
+// Once Google Translate fails, skip retrying it until this timestamp (avoids
+// hammering a blocked/unreachable endpoint on every single caption line).
+let googleDownUntil = 0;
+const GOOGLE_RETRY_COOLDOWN = 5 * 60 * 1000;
 let overlay = null;
 let isEnabled = true;
 let observer = null;
@@ -489,19 +493,41 @@ async function translateText(text) {
     return;
   }
 
-  try {
-    const translated = await googleTranslate(text, settings.targetLang);
-    if (!translated) return;
+  const translated = await fetchTranslation(text, settings.sourceLang || 'auto', settings.targetLang);
+  if (translated) {
     if (cache.size >= 600) cache.delete(cache.keys().next().value);
     cache.set(key, translated);
     if (currentText === text) showTranslation(translated, settings.showOriginal ? text : '');
-  } catch (e) {
-    console.warn('[UdemyThai]', e.message);
+  } else if (currentText === text) {
+    // Both translation providers failed (e.g. blocked network) — show the original
+    // text rather than leaving the overlay empty.
+    showTranslation(text, '');
   }
 }
 
-async function googleTranslate(text, tl) {
-  const sl = settings.sourceLang || 'auto';
+// Tries Google Translate first, then falls back to MyMemory if that's unreachable
+// (e.g. translate.googleapis.com blocked by network/firewall/ISP). Once Google
+// fails it's skipped for a cooldown period so a blocked endpoint doesn't get
+// retried (and logged) on every single caption line.
+async function fetchTranslation(text, sl, tl) {
+  if (Date.now() >= googleDownUntil) {
+    try {
+      const translated = await googleTranslate(text, sl, tl);
+      if (translated) return translated;
+    } catch (e) {
+      googleDownUntil = Date.now() + GOOGLE_RETRY_COOLDOWN;
+      console.info('[UdemyThai] Google Translate unreachable, switching to fallback:', e.message);
+    }
+  }
+  try {
+    return await myMemoryTranslate(text, sl, tl);
+  } catch (e) {
+    console.info('[UdemyThai] Fallback translation also failed:', e.message);
+    return null;
+  }
+}
+
+async function googleTranslate(text, sl, tl) {
   const url =
     'https://translate.googleapis.com/translate_a/single' +
     '?client=gtx&sl=' + encodeURIComponent(sl) + '&tl=' + encodeURIComponent(tl) +
@@ -513,6 +539,17 @@ async function googleTranslate(text, tl) {
     return data[0].filter(i => i && i[0]).map(i => i[0]).join('');
   }
   return null;
+}
+
+async function myMemoryTranslate(text, sl, tl) {
+  const pair = (sl === 'auto' ? 'en' : sl) + '|' + tl;
+  const url =
+    'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) +
+    '&langpair=' + encodeURIComponent(pair);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return data?.responseData?.translatedText || null;
 }
 
 // ─── SPA navigation ───────────────────────────────────────────────────────────

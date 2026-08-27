@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RIP Translator",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Real-time subtitle translation for online courses (Udemy, gamedev.tv, Domestika, and more)",
   "permissions": [
     "storage",
@@ -13,7 +13,8 @@
     "https://gamedev.tv/*",
     "https://iframe.mediadelivery.net/*",
     "https://www.domestika.org/*",
-    "https://translate.googleapis.com/*"
+    "https://translate.googleapis.com/*",
+    "https://api.mymemory.translated.net/*"
   ],
   "content_scripts": [
     {

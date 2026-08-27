@@ -8,6 +8,10 @@ const LINE_HEIGHT = 1.6;
 const MAX_OVERLAY_WIDTH = '70vw';
 
 const cache = new Map();
+// Once Google Translate fails, skip retrying it until this timestamp (avoids
+// hammering a blocked/unreachable endpoint on every single caption line).
+let googleDownUntil = 0;
+const GOOGLE_RETRY_COOLDOWN = 5 * 60 * 1000;
 let overlay      = null;
 let currentText  = '';
 let dragPos      = null;
@@ -344,23 +348,52 @@ async function translateText(text) {
     if (currentText === text) showOverlay(cache.get(key), settings.showOriginal ? text : '');
     return;
   }
-  try {
-    const sl = settings.sourceLang || 'auto';
-    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl='
-      + encodeURIComponent(sl) + '&tl='
-      + encodeURIComponent(settings.targetLang) + '&dt=t&q=' + encodeURIComponent(text);
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    const translated = Array.isArray(data) && Array.isArray(data[0])
-      ? data[0].filter(i => i?.[0]).map(i => i[0]).join('')
-      : null;
-    if (!translated) return;
+  const sl = settings.sourceLang || 'auto';
+  const translated = await fetchTranslation(text, sl, settings.targetLang);
+  if (translated) {
     if (cache.size >= 400) cache.delete(cache.keys().next().value);
     cache.set(key, translated);
     if (currentText === text) showOverlay(translated, settings.showOriginal ? text : '');
+  } else if (currentText === text) {
+    // Both translation providers failed (e.g. blocked network) — show the original
+    // text rather than leaving the overlay empty.
+    showOverlay(text, '');
+  }
+}
+
+// Tries Google Translate first, then falls back to MyMemory if that's unreachable
+// (e.g. translate.googleapis.com blocked by network/firewall/ISP). Once Google
+// fails it's skipped for a cooldown period so a blocked endpoint doesn't get
+// retried (and logged) on every single caption line.
+async function fetchTranslation(text, sl, tl) {
+  if (Date.now() >= googleDownUntil) {
+    try {
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl='
+        + encodeURIComponent(sl) + '&tl='
+        + encodeURIComponent(tl) + '&dt=t&q=' + encodeURIComponent(text);
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const translated = Array.isArray(data) && Array.isArray(data[0])
+        ? data[0].filter(i => i?.[0]).map(i => i[0]).join('')
+        : null;
+      if (translated) return translated;
+    } catch (e) {
+      googleDownUntil = Date.now() + GOOGLE_RETRY_COOLDOWN;
+      console.info('[RIP gamedev] Google Translate unreachable, switching to fallback:', e.message);
+    }
+  }
+  try {
+    const pair = (sl === 'auto' ? 'en' : sl) + '|' + tl;
+    const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text)
+      + '&langpair=' + encodeURIComponent(pair);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    return data?.responseData?.translatedText || null;
   } catch (e) {
-    console.warn('[RIP gamedev]', e.message);
+    console.info('[RIP gamedev] Fallback translation also failed:', e.message);
+    return null;
   }
 }
 
