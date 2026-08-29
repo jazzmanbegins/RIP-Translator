@@ -390,7 +390,14 @@ async function fetchTranslation(text, sl, tl) {
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    return data?.responseData?.translatedText || null;
+    const translated = data?.responseData?.translatedText;
+    // MyMemory returns HTTP 200 even when rate-limited or out of quota, with an
+    // English warning string in translatedText and the real error in responseStatus —
+    // treat that as a failure instead of caching/showing the warning as a "translation".
+    if (!translated || Number(data?.responseStatus) !== 200 || /MYMEMORY WARNING/i.test(translated)) {
+      return null;
+    }
+    return translated;
   } catch (e) {
     console.info('[RIP gamedev] Fallback translation also failed:', e.message);
     return null;
